@@ -6,6 +6,8 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <request.h>
+#include <response.h>
 
 int main()
 {
@@ -62,8 +64,14 @@ int main()
 	socket_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
 	printf("Client connected\n");
 
-
 	// Handling request
+	struct requset req = {
+		.method = "",
+		.http_v = "",
+		.host = "",
+		.path = "",
+	};
+
 	char buf[1024];
 	ssize_t data_recv_size;
 
@@ -81,16 +89,58 @@ int main()
 	for (int i = 0; i < data_recv_size; ++i)
 	{
 		printf("%c", buf[i]);
+		// Lookin for "Host" word in request parameters
+		if (buf[i] == 'H' && buf[i + 3] == 't')
+		{
+			int j = i + 6;
+			int k = 0;
+			while (buf[j] != '\n')
+			{
+				req.host[k] = buf[j];
+				++j;
+				++k;
+			}
+		}
+	}
+
+	// Looking for url path in request parameter
+	int i = 5;
+	int j = 0;
+	while (buf[i] != ' ')
+	{
+		req.path[j] = buf[i];
+		++i;
+		++j;
 	}
 
 	printf("\n");
 
 	// Creating and sending response
-	char *buf_res = "HTTP/1.1 200 OK\r\n\r\n";
+	struct response res = {
+		.http_v = "HTTP/1.1",
+		.status_code = "404",
+		.status_word = "Not Found",
+	};
+
+	if (strlen(req.path) == 0)
+	{
+		res.status_code = "200";
+		res.status_word = "OK";
+	}
+
+	char buf_res[50];
+
+	strcpy(buf_res, "HTTP/1.1 ");
+	strcat(buf_res, res.status_code);
+	strcat(buf_res, " ");
+	strcat(buf_res, res.status_word);
+	strcat(buf_res, "\r\n\r\n");
+
 	ssize_t data_sent_size;
 
 	// strlen + 1 this one is \0 sign at the end of all strings
-	printf("%ld", strlen(buf_res));
+	printf("%ld\n", strlen(buf_res));
+	printf("%s\n", buf_res);
 
 	data_sent_size = send(socket_fd, buf_res, strlen(buf_res) + 1, 0);
 	if (data_sent_size == -1)
