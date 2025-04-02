@@ -6,8 +6,8 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <request.h>
-#include <response.h>
+#include <./request.h>
+#include <./response.h>
 
 int main()
 {
