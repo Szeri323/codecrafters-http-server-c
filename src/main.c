@@ -143,9 +143,8 @@ int main()
 		res.status_code = "200";
 		res.status_word = "OK";
 		int req_path_length = strlen(req.path);
-		int path_body_length = req_path_length - (req_path_length - 5);
 		char value[30];
-		int i = path_body_length;
+		int i = 5;
 		int j = 0;
 		while (i < req_path_length)
 		{
