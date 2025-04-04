@@ -10,6 +10,18 @@
 #include "response.h"
 #include "header.h"
 
+void parse_reqest_element(int i, int step, char break_char, char *dest, char *buf)
+{
+	int j = i + (step + 3);
+	int k = 0;
+	while (buf[j] != break_char)
+	{
+		dest[k] = buf[j];
+		++j;
+		++k;
+	}
+};
+
 int main()
 {
 	// Disable output buffering
@@ -66,11 +78,16 @@ int main()
 	printf("Client connected\n");
 
 	// Handling request
-	struct requset req = {
+	struct REQUEST_HEADER request_header = {
+		.user_agent = "",
+	};
+
+	struct REQUEST req = {
 		.method = "",
 		.http_v = "",
 		.host = "",
 		.path = "",
+		.request_header = request_header,
 	};
 
 	char buf[1024];
@@ -87,39 +104,38 @@ int main()
 
 	printf("Response:\n");
 
+	printf("Parsing REQUEST:\n");
+	printf("\n----REQUEST----\n");
 	for (int i = 0; i < data_recv_size; ++i)
 	{
 		printf("%c", buf[i]);
-		// printf("x: %x\n", buf[i]);
-		// printf("hhx: %hhx\n", buf[i]);
-		// Lookin for "Host" word in request parameters
+
+		if (buf[i] == 'G' && buf[i + 2] == 'T')
+		{
+			parse_reqest_element(i, 2, ' ', req.path, buf);
+		}
+
+		if (buf[i] == 'U' && buf[i + 9] == 't')
+		{
+			parse_reqest_element(i, 9, '\r', request_header.user_agent, buf);
+		}
+
 		if (buf[i] == 'H' && buf[i + 3] == 't')
 		{
-			int j = i + 6;
-			int k = 0;
-			while (buf[j] != '\n')
-			{
-				req.host[k] = buf[j];
-				++j;
-				++k;
-			}
+			parse_reqest_element(i, 3, '\n', req.host, buf);
 		}
 	}
+	printf("\n----END REQUEST----\n");
 
 	// Looking for url path in request parameter
-	int i = 5;
-	int j = 0;
-	while (buf[i] != ' ')
-	{
-		req.path[j] = buf[i];
-		++i;
-		++j;
-	}
+
+	// loking for user agent in request
 
 	printf("\n");
 
 	// Creating and sending response
-	struct response res = {
+	printf("CREATING RESPONSE:\n");
+	struct RESPONSE res = {
 		.http_v = "HTTP/1.1",
 		.status_code = "404",
 		.status_word = "Not Found",
@@ -127,7 +143,7 @@ int main()
 
 	char buf_res[50];
 
-	struct header header =
+	struct HEADER header =
 		{
 			.content_type = "",
 			.content_length = 0,
@@ -152,12 +168,20 @@ int main()
 			++i;
 			++j;
 		}
-		// value[j] = '\0';
-		printf("value: %s\n", value);
 		header.content_type = "text/plain";
 		header.content_length = strlen(value);
 
 		strcpy(res.body, value);
+	}
+	else if (strstr(req.path, "user-agent") != NULL)
+	{
+		res.status_code = "200";
+		res.status_word = "OK";
+
+		header.content_type = "text/plain";
+		header.content_length = strlen(request_header.user_agent);
+
+		strcpy(res.body, request_header.user_agent);
 	}
 
 	// Status line
@@ -168,19 +192,16 @@ int main()
 	if (strlen(res.body) != 0)
 	{
 		strcat(buf_res, "\r\n");
-		printf("%s\n", buf_res);
 		// Headers
 		strcat(buf_res, "Content-Type: ");
 		strcat(buf_res, header.content_type);
 		strcat(buf_res, "\r\n");
 		strcat(buf_res, "Content-Length: ");
-		printf("test\n");
 		char number[30];
 		sprintf(number, "%d", header.content_length);
 		strcat(buf_res, number);
 		strcat(buf_res, "\r\n\r\n");
 		// Response body
-		printf("body: %s\n",res.body);
 		strcat(buf_res, res.body);
 	}
 	else
@@ -190,19 +211,16 @@ int main()
 
 	ssize_t data_sent_size;
 
-	// strlen + 1 this one is \0 sign at the end of all strings
-	printf("%ld\n", strlen(buf_res));
-	printf("%s\n", buf_res);
+	printf("\n----RESPONSE----\n%s\n----END RESPONSE----\n", buf_res);
 
-	data_sent_size = send(socket_fd, buf_res, strlen(buf_res) + 1, 0);
+	data_sent_size = send(socket_fd, buf_res, strlen(buf_res), 0);
 	if (data_sent_size == -1)
 	{
 		printf("Socket creation failed: %s...\n", strerror(errno));
 		return 1;
 	}
 
-	printf("%zd\n", data_sent_size);
-	printf("sended\n");
+	printf("\nsended\n");
 
 	close(server_fd);
 	printf("Connection closed\n");

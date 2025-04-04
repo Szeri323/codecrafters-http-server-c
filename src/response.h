@@ -1,4 +1,4 @@
-struct response
+struct RESPONSE
 {
     char *http_v;
     char *status_code;
