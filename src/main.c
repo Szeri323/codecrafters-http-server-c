@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include "request.h"
 #include "response.h"
+#include "header.h"
 
 int main()
 {
@@ -89,6 +90,8 @@ int main()
 	for (int i = 0; i < data_recv_size; ++i)
 	{
 		printf("%c", buf[i]);
+		// printf("x: %x\n", buf[i]);
+		// printf("hhx: %hhx\n", buf[i]);
 		// Lookin for "Host" word in request parameters
 		if (buf[i] == 'H' && buf[i + 3] == 't')
 		{
@@ -122,19 +125,69 @@ int main()
 		.status_word = "Not Found",
 	};
 
+	char buf_res[50];
+
+	struct header header =
+		{
+			.content_type = "",
+			.content_length = 0,
+		};
+
 	if (strlen(req.path) == 0)
 	{
 		res.status_code = "200";
 		res.status_word = "OK";
 	}
+	else if (strstr(req.path, "echo") != NULL)
+	{
+		res.status_code = "200";
+		res.status_word = "OK";
+		int req_path_length = strlen(req.path);
+		int path_body_length = req_path_length - (req_path_length - 5);
+		char value[30];
+		int i = path_body_length;
+		int j = 0;
+		while (i < req_path_length)
+		{
+			value[j] = req.path[i];
+			++i;
+			++j;
+		}
+		// value[j] = '\0';
+		printf("value: %s\n", value);
+		header.content_type = "text/plain";
+		header.content_length = strlen(value);
 
-	char buf_res[50];
+		strcpy(res.body, value);
+	}
 
+	// Status line
 	strcpy(buf_res, "HTTP/1.1 ");
 	strcat(buf_res, res.status_code);
 	strcat(buf_res, " ");
 	strcat(buf_res, res.status_word);
-	strcat(buf_res, "\r\n\r\n");
+	if (strlen(res.body) != 0)
+	{
+		strcat(buf_res, "\r\n");
+		printf("%s\n", buf_res);
+		// Headers
+		strcat(buf_res, "Content-Type: ");
+		strcat(buf_res, header.content_type);
+		strcat(buf_res, "\r\n");
+		strcat(buf_res, "Content-Length: ");
+		printf("test\n");
+		char number[30];
+		sprintf(number, "%d", header.content_length);
+		strcat(buf_res, number);
+		strcat(buf_res, "\r\n\r\n");
+		// Response body
+		printf("body: %s\n",res.body);
+		strcat(buf_res, res.body);
+	}
+	else
+	{
+		strcat(buf_res, "\r\n\r\n");
+	}
 
 	ssize_t data_sent_size;
 

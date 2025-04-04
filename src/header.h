@@ -1,4 +1,5 @@
 struct header
 {
-    /* data */
+    char *content_type;
+    int content_length;
 };
