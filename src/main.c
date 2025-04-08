@@ -7,208 +7,55 @@
 #include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "request.h"
-#include "response.h"
-#include "header.h"
-
-void parse_reqest_element(int i, int step, char break_char, char *dest, char *buf)
-{
-	int j = i + (step + 3);
-	int k = 0;
-	while (buf[j] != break_char)
-	{
-		dest[k] = buf[j];
-		++j;
-		++k;
-	}
-};
-
-int process_cominication(int socket_fd)
-{
-	// Handling request
-	struct REQUEST_HEADER request_header = {
-		.user_agent = "",
-	};
-
-	struct REQUEST req = {
-		.method = "",
-		.http_v = "",
-		.host = "",
-		.path = "",
-		.request_header = request_header,
-	};
-
-	char buf[1024];
-	ssize_t data_recv_size;
-
-	data_recv_size = recv(socket_fd, buf, sizeof(buf), 0);
-	if (data_recv_size == -1)
-	{
-		printf("Socket creation failed: %s...\n", strerror(errno));
-		return 1;
-	}
-
-	printf("data recv size: %zd\n", data_recv_size);
-
-	printf("Response:\n");
-
-	printf("Parsing REQUEST:\n");
-	printf("\n----REQUEST----\n");
-	for (int i = 0; i < data_recv_size; ++i)
-	{
-		printf("%c", buf[i]);
-
-		if (buf[i] == 'G' && buf[i + 2] == 'T')
-		{
-			parse_reqest_element(i, 2, ' ', req.path, buf);
-		}
-
-		if (buf[i] == 'U' && buf[i + 9] == 't')
-		{
-			parse_reqest_element(i, 9, '\r', request_header.user_agent, buf);
-		}
-
-		if (buf[i] == 'H' && buf[i + 3] == 't')
-		{
-			parse_reqest_element(i, 3, '\n', req.host, buf);
-		}
-	}
-	printf("\n----END REQUEST----\n");
-
-	// Looking for url path in request parameter
-
-	// loking for user agent in request
-
-	printf("\n");
-
-	// Creating and sending response
-	printf("CREATING RESPONSE:\n");
-	struct RESPONSE res = {
-		.http_v = "HTTP/1.1",
-		.status_code = "404",
-		.status_word = "Not Found",
-	};
-
-	char buf_res[50];
-
-	struct HEADER header =
-		{
-			.content_type = "",
-			.content_length = 0,
-		};
-
-	if (strlen(req.path) == 0)
-	{
-		res.status_code = "200";
-		res.status_word = "OK";
-	}
-	else if (strstr(req.path, "echo") != NULL)
-	{
-		res.status_code = "200";
-		res.status_word = "OK";
-		int req_path_length = strlen(req.path);
-		char value[30];
-		int i = 5;
-		int j = 0;
-		while (i < req_path_length)
-		{
-			value[j] = req.path[i];
-			++i;
-			++j;
-		}
-		header.content_type = "text/plain";
-		header.content_length = strlen(value);
-
-		strcpy(res.body, value);
-	}
-	else if (strstr(req.path, "user-agent") != NULL)
-	{
-		res.status_code = "200";
-		res.status_word = "OK";
-
-		header.content_type = "text/plain";
-		header.content_length = strlen(request_header.user_agent);
-
-		strcpy(res.body, request_header.user_agent);
-	}
-
-	// Status line
-	strcpy(buf_res, "HTTP/1.1 ");
-	strcat(buf_res, res.status_code);
-	strcat(buf_res, " ");
-	strcat(buf_res, res.status_word);
-	if (strlen(res.body) != 0)
-	{
-		strcat(buf_res, "\r\n");
-		// Headers
-		strcat(buf_res, "Content-Type: ");
-		strcat(buf_res, header.content_type);
-		strcat(buf_res, "\r\n");
-		strcat(buf_res, "Content-Length: ");
-		char number[30];
-		sprintf(number, "%d", header.content_length);
-		strcat(buf_res, number);
-		strcat(buf_res, "\r\n\r\n");
-		// Response body
-		strcat(buf_res, res.body);
-	}
-	else
-	{
-		strcat(buf_res, "\r\n\r\n");
-	}
-
-	ssize_t data_sent_size;
-
-	printf("\n----RESPONSE----\n%s\n----END RESPONSE----\n", buf_res);
-
-	data_sent_size = send(socket_fd, buf_res, strlen(buf_res), 0);
-	if (data_sent_size == -1)
-	{
-		printf("Socket creation failed: %s...\n", strerror(errno));
-		return 1;
-	}
-
-	printf("\nsended\n");
-	return 0;
-}
-
-struct CONNECTION_PARAMS
-{
-	int server_fd;
-	struct sockaddr_in client_addr;
-	int client_addr_len;
-};
+#include "networking.h"
 
 void *thread_function_1(void *arg)
 {
-	struct CONNECTION_PARAMS *cp = arg;
+	struct DATA_TO_PASS *dp = (struct DATA_TO_PASS *)arg;
+	struct CONNECTION_PARAMS *cp = (struct CONNECTION_PARAMS *)&dp->cp;
+	struct ARGUMENTS *args = &dp->args;
 	int socket_fd;
 	socket_fd = accept(cp->server_fd, (struct sockaddr *)&cp->client_addr, &cp->client_addr_len);
 	printf("Client connected\n");
 
-	process_cominication(socket_fd);
+	process_commuinication(socket_fd, args);
+
+	pthread_exit(NULL);
 }
 void *thread_function_2(void *arg)
 {
-	struct CONNECTION_PARAMS *cp = arg;
+	struct DATA_TO_PASS *dp = (struct DATA_TO_PASS *)arg;
+	struct CONNECTION_PARAMS *cp = (struct CONNECTION_PARAMS *)&dp->cp;
+	struct ARGUMENTS *args = &dp->args;
 	int socket_fd;
 	socket_fd = accept(cp->server_fd, (struct sockaddr *)&cp->client_addr, &cp->client_addr_len);
 	printf("Client connected\n");
 
-	process_cominication(socket_fd);
+	process_commuinication(socket_fd, args);
+
+	pthread_exit(NULL);
 }
 void *thread_function_3(void *arg)
 {
-	struct CONNECTION_PARAMS *cp = arg;
+	struct DATA_TO_PASS *dp = (struct DATA_TO_PASS *)arg;
+	struct CONNECTION_PARAMS *cp = (struct CONNECTION_PARAMS *)&dp->cp;
+	struct ARGUMENTS *args = &dp->args;
 	int socket_fd;
 	socket_fd = accept(cp->server_fd, (struct sockaddr *)&cp->client_addr, &cp->client_addr_len);
 	printf("Client connected\n");
 
-	process_cominication(socket_fd);
+	process_commuinication(socket_fd, args);
+
+	pthread_exit(NULL);
 }
 
-int main()
+int main(int argc, char **argv)
 {
+	struct ARGUMENTS args = {
+		.argc = argc,
+		.argv = argv,
+	};
+
 	pthread_t thread1, thread2, thread3;
 	int status1, status2, status3;
 
@@ -261,28 +108,33 @@ int main()
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
 
+	struct CONNECTION_PARAMS cp = {
+		.server_fd = server_fd,
+		.client_addr = client_addr,
+		.client_addr_len = client_addr_len,
+	};
+
+	struct DATA_TO_PASS dp = {
+		.cp = cp,
+		.args = args,
+	};
+
 	while (1)
 	{
 
-		struct CONNECTION_PARAMS cp = {
-			.server_fd = server_fd,
-			.client_addr = client_addr,
-			.client_addr_len = client_addr_len,
-		};
-
-		status1 = pthread_create(&thread1, NULL, thread_function_1, &cp);
+		status1 = pthread_create(&thread1, NULL, thread_function_1, &dp);
 		if (status1)
 		{
 			printf("Error Thread1");
 			return 1;
 		}
-		status2 = pthread_create(&thread2, NULL, thread_function_1, &cp);
+		status2 = pthread_create(&thread2, NULL, thread_function_1, &dp);
 		if (status2)
 		{
 			printf("Error Thread2");
 			return 1;
 		}
-		status3 = pthread_create(&thread3, NULL, thread_function_1, &cp);
+		status3 = pthread_create(&thread3, NULL, thread_function_1, &dp);
 		if (status3)
 		{
 			printf("Error Thread3");
@@ -305,3 +157,5 @@ int main()
 
 	return 0;
 }
+
+// After 3 requests the 4th one makes error
