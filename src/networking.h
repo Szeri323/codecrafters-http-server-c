@@ -162,7 +162,7 @@ int process_commuinication(int socket_fd, void *args)
         {
             int i = 0;
             char c;
-            char file_content[30];
+            char file_content[100];
             while ((c = fgetc(file)) != EOF)
             {
                 file_content[i] = c;
