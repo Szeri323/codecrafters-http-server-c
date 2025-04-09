@@ -5,6 +5,7 @@
 #include <netinet/ip.h>
 #include <string.h>
 #include <errno.h>
+#include <math.h>
 #include "request.h"
 #include "response.h"
 #include "header.h"
@@ -50,6 +51,7 @@ int process_commuinication(int socket_fd, void *args)
         .host = "",
         .path = "",
         .request_header = request_header,
+        .body = "",
     };
 
     char buf[1024];
@@ -74,6 +76,12 @@ int process_commuinication(int socket_fd, void *args)
 
         if (buf[i] == 'G' && buf[i + 2] == 'T')
         {
+            req.method = "GET";
+            parse_reqest_element(i, 2, ' ', req.path, buf);
+        }
+        if (buf[i] == 'P' && buf[i + 3] == 'T')
+        {
+            req.method = "POST";
             parse_reqest_element(i, 2, ' ', req.path, buf);
         }
 
@@ -85,6 +93,39 @@ int process_commuinication(int socket_fd, void *args)
         if (buf[i] == 'H' && buf[i + 3] == 't')
         {
             parse_reqest_element(i, 3, '\n', req.host, buf);
+        }
+        if (buf[i] == 'C' && buf[i + 6] == 't' && buf[i + 8] == 'L' && buf[i + 13] == 'h')
+        {
+            int j = i + 16;
+            int k = 0;
+            char number[10];
+            for (int i = 0; i < 10; ++i)
+            {
+                number[i] = 0;
+            }
+
+            while (buf[j] != '\r')
+            {
+                number[k] = buf[j];
+                ++j;
+                ++k;
+            }
+            number[k] = '\0';
+
+            req.content_length = atoi(number);
+        }
+        if (buf[i] == '\r' && buf[i + 1] == '\n' && buf[i + 2] == '\r' && buf[i + 3] == '\n')
+        {
+            int k = 0;
+            printf("\n%d\n", req.content_length);
+            printf("\ni: %d\n", i+4);
+            for (int j = i + 4; j < data_recv_size; ++j, ++k)
+            {
+                printf("%c", buf[j]);
+                req.body[k] = buf[j];
+            }
+
+            // printf("REQUEST BODY: %s\n", req.body);
         }
     }
     printf("\n----END REQUEST----\n");
@@ -105,75 +146,98 @@ int process_commuinication(int socket_fd, void *args)
 
     char buf_res[50];
 
-    struct HEADER header =
-        {
-            .content_type = "",
-            .content_length = 0,
-        };
+    struct HEADER header = {
+        .content_type = "",
+        .content_length = 0,
+    };
 
-    if (strlen(req.path) == 0)
+    if (strstr(req.method, "GET"))
     {
-        res.status_code = "200";
-        res.status_word = "OK";
-    }
-    else if (strstr(req.path, "echo") != NULL)
-    {
-        res.status_code = "200";
-        res.status_word = "OK";
-        int req_path_length = strlen(req.path);
-        char value[30];
-        for (int i = 0; i < 30; ++i)
+        if (strlen(req.path) == 0)
         {
-            value[i] = 0;
-        }
-        parse_request_path_value(5, req_path_length, value, req);
-        printf("value of echo: %s\n", value);
-        header.content_type = "text/plain";
-        header.content_length = strlen(value);
-
-        strcpy(res.body, value);
-    }
-    else if (strstr(req.path, "user-agent") != NULL)
-    {
-        res.status_code = "200";
-        res.status_word = "OK";
-
-        header.content_type = "text/plain";
-        header.content_length = strlen(request_header.user_agent);
-
-        strcpy(res.body, request_header.user_agent);
-    }
-    else if ((strstr(req.path, "files") != NULL) && argc == 3)
-    {
-        // Take dir from --directory path
-        FILE *file;
-        int req_path_length = strlen(req.path);
-        char *tmp = argv[2];
-        char value[50];
-        for (int i = 0; i < 50; ++i)
-        {
-            value[i] = 0;
-        }
-        parse_request_path_value(6, req_path_length, value, req);
-
-        file = fopen(strcat(tmp, value), "r");
-
-        if (file != NULL)
-        {
-            int i = 0;
-            char c;
-            char file_content[100];
-            while ((c = fgetc(file)) != EOF)
-            {
-                file_content[i] = c;
-                ++i;
-            }
-            fclose(file);
             res.status_code = "200";
             res.status_word = "OK";
-            header.content_type = "application/octet-stream";
-            header.content_length = strlen(file_content);
-            strcpy(res.body, file_content);
+        }
+        else if (strstr(req.path, "echo") != NULL)
+        {
+            res.status_code = "200";
+            res.status_word = "OK";
+            int req_path_length = strlen(req.path);
+            char value[30];
+            for (int i = 0; i < 30; ++i)
+            {
+                value[i] = 0;
+            }
+            parse_request_path_value(5, req_path_length, value, req);
+            printf("value of echo: %s\n", value);
+            header.content_type = "text/plain";
+            header.content_length = strlen(value);
+
+            strcpy(res.body, value);
+        }
+        else if (strstr(req.path, "user-agent") != NULL)
+        {
+            res.status_code = "200";
+            res.status_word = "OK";
+
+            header.content_type = "text/plain";
+            header.content_length = strlen(request_header.user_agent);
+
+            strcpy(res.body, request_header.user_agent);
+        }
+        else if ((strstr(req.path, "files") != NULL) && argc == 3)
+        {
+            FILE *file;
+            int req_path_length = strlen(req.path);
+            char *tmp = argv[2];
+            char value[50];
+            for (int i = 0; i < 50; ++i)
+            {
+                value[i] = 0;
+            }
+            parse_request_path_value(6, req_path_length, value, req);
+
+            file = fopen(strcat(tmp, value), "r");
+
+            if (file != NULL)
+            {
+                int i = 0;
+                char c;
+                char file_content[100];
+                while ((c = fgetc(file)) != EOF)
+                {
+                    file_content[i] = c;
+                    ++i;
+                }
+                fclose(file);
+                res.status_code = "200";
+                res.status_word = "OK";
+                header.content_type = "application/octet-stream";
+                header.content_length = strlen(file_content);
+                strcpy(res.body, file_content);
+            }
+        }
+    }
+    else if (strstr(req.method, "POST"))
+    {
+        if ((strstr(req.path, "files") != NULL) && argc == 3)
+        {
+            FILE *file;
+            int req_path_length = strlen(req.path);
+            char *tmp = argv[2];
+            char value[50];
+            for (int i = 0; i < 50; ++i)
+            {
+                value[i] = 0;
+            }
+            parse_request_path_value(7, req_path_length, value, req);
+
+            file = fopen(strcat(tmp, value), "w");
+            fputs(req.body, file);
+
+            fclose(file);
+            res.status_code = "201";
+            res.status_word = "Created";
         }
     }
 
@@ -201,7 +265,7 @@ int process_commuinication(int socket_fd, void *args)
     {
         strcat(buf_res, "\r\n\r\n");
     }
-
+    printf("buf RESSSSSSSS: %s\n", buf_res);
     ssize_t data_sent_size;
 
     printf("\n----RESPONSE----\n%s\n----END RESPONSE----\n", buf_res);
