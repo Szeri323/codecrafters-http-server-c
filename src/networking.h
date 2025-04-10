@@ -74,22 +74,37 @@ int process_commuinication(int socket_fd, void *args)
     {
         printf("%c", buf[i]);
 
+        // Looking for GET
         if (buf[i] == 'G' && buf[i + 2] == 'T')
         {
             req.method = "GET";
             parse_reqest_element(i, 2, ' ', req.path, buf);
         }
+        // Looking for POST
         if (buf[i] == 'P' && buf[i + 3] == 'T')
         {
             req.method = "POST";
             parse_reqest_element(i, 2, ' ', req.path, buf);
         }
-
+        // Looking for User-Agent
         if (buf[i] == 'U' && buf[i + 9] == 't')
         {
             parse_reqest_element(i, 9, '\r', request_header.user_agent, buf);
         }
 
+        // Parse Content-Type
+
+        // Looking for Accept-Encoding
+        if (buf[i] == 'A' && buf[i + 5] == 't' && buf[i + 7] == 'E' && buf[i + 14] == 'g')
+        {
+            int j = i + 17;
+            if (buf[j] == 'g' && buf[j + 3] == 'p')
+            {
+                req.accept_encoding = "gzip";
+            }
+        }
+
+        // Looking for Host
         if (buf[i] == 'H' && buf[i + 3] == 't')
         {
             parse_reqest_element(i, 3, '\n', req.host, buf);
@@ -114,18 +129,15 @@ int process_commuinication(int socket_fd, void *args)
 
             req.content_length = atoi(number);
         }
+
+        // Looking for End of Headers and Beginning of Body
         if (buf[i] == '\r' && buf[i + 1] == '\n' && buf[i + 2] == '\r' && buf[i + 3] == '\n')
         {
             int k = 0;
-            printf("\n%d\n", req.content_length);
-            printf("\ni: %d\n", i+4);
             for (int j = i + 4; j < data_recv_size; ++j, ++k)
             {
-                printf("%c", buf[j]);
                 req.body[k] = buf[j];
             }
-
-            // printf("REQUEST BODY: %s\n", req.body);
         }
     }
     printf("\n----END REQUEST----\n");
@@ -142,9 +154,10 @@ int process_commuinication(int socket_fd, void *args)
         .http_v = "HTTP/1.1",
         .status_code = "404",
         .status_word = "Not Found",
+        .body[0] = 0,
     };
 
-    char buf_res[50];
+    char buf_res[500];
 
     struct HEADER header = {
         .content_type = "",
@@ -172,8 +185,20 @@ int process_commuinication(int socket_fd, void *args)
             printf("value of echo: %s\n", value);
             header.content_type = "text/plain";
             header.content_length = strlen(value);
+            if (req.accept_encoding != NULL)
+            {
+                header.accept_encoding = req.accept_encoding;
+            }
+            printf("\n\nreq.accept_encoding: %s \n\n", req.accept_encoding);
+            printf("\n\nheader.accept_encoding: %s \n\n", header.accept_encoding);
+            printf("\nstrlen: %zd", strlen(value));
+            for (int i = 0; i < strlen(value); ++i)
+            {
+                res.body[i] = value[i];
+            }
 
-            strcpy(res.body, value);
+            // strcpy(res.body, value);
+            printf("\n\nres body: %s \n\n", res.body);
         }
         else if (strstr(req.path, "user-agent") != NULL)
         {
@@ -182,6 +207,10 @@ int process_commuinication(int socket_fd, void *args)
 
             header.content_type = "text/plain";
             header.content_length = strlen(request_header.user_agent);
+            if (req.accept_encoding != NULL)
+            {
+                header.accept_encoding = req.accept_encoding;
+            }
 
             strcpy(res.body, request_header.user_agent);
         }
@@ -214,6 +243,10 @@ int process_commuinication(int socket_fd, void *args)
                 res.status_word = "OK";
                 header.content_type = "application/octet-stream";
                 header.content_length = strlen(file_content);
+                if (req.accept_encoding != NULL)
+                {
+                    header.accept_encoding = req.accept_encoding;
+                }
                 strcpy(res.body, file_content);
             }
         }
@@ -246,10 +279,19 @@ int process_commuinication(int socket_fd, void *args)
     strcat(buf_res, res.status_code);
     strcat(buf_res, " ");
     strcat(buf_res, res.status_word);
+
     if (strlen(res.body) != 0)
     {
+        printf("\ntest res body len: %ld", strlen(res.body));
+        printf("\ntest res body: %s", res.body);
         strcat(buf_res, "\r\n");
         // Headers
+        if (header.accept_encoding != NULL)
+        {
+            strcat(buf_res, "Content-Encoding: ");
+            strcat(buf_res, header.accept_encoding);
+            strcat(buf_res, "\r\n");
+        }
         strcat(buf_res, "Content-Type: ");
         strcat(buf_res, header.content_type);
         strcat(buf_res, "\r\n");
@@ -257,9 +299,13 @@ int process_commuinication(int socket_fd, void *args)
         char number[30];
         sprintf(number, "%d", header.content_length);
         strcat(buf_res, number);
+
         strcat(buf_res, "\r\n\r\n");
         // Response body
-        strcat(buf_res, res.body);
+        printf("\n resbody: %s\n", res.body);
+        char *test = res.body;
+        printf("\n test: %s\n", test);
+        strcat(buf_res, test);
     }
     else
     {
@@ -270,13 +316,16 @@ int process_commuinication(int socket_fd, void *args)
 
     printf("\n----RESPONSE----\n%s\n----END RESPONSE----\n", buf_res);
 
+    printf("\n\nstrlen: %ld", strlen(buf_res));
+    
     data_sent_size = send(socket_fd, buf_res, strlen(buf_res), 0);
     if (data_sent_size == -1)
     {
         printf("Socket creation failed: %s...\n", strerror(errno));
         return 1;
     }
-
+    printf("\n\nsizet: %zd", data_sent_size);
     printf("\nsended\n");
+    // close(socket_fd);
     return 0;
 }
