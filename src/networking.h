@@ -98,9 +98,13 @@ int process_commuinication(int socket_fd, void *args)
         if (buf[i] == 'A' && buf[i + 5] == 't' && buf[i + 7] == 'E' && buf[i + 14] == 'g')
         {
             int j = i + 17;
-            if (buf[j] == 'g' && buf[j + 3] == 'p')
+            while (buf[j] != '\r')
             {
-                req.accept_encoding = "gzip";
+                if (buf[j] == 'g' && buf[j + 3] == 'p')
+                {
+                    req.accept_encoding = "gzip";
+                }
+                ++j;
             }
         }
 
@@ -317,7 +321,7 @@ int process_commuinication(int socket_fd, void *args)
     printf("\n----RESPONSE----\n%s\n----END RESPONSE----\n", buf_res);
 
     printf("\n\nstrlen: %ld", strlen(buf_res));
-    
+
     data_sent_size = send(socket_fd, buf_res, strlen(buf_res), 0);
     if (data_sent_size == -1)
     {
