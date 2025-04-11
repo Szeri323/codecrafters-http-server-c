@@ -5,13 +5,13 @@
 #include <netinet/ip.h>
 #include <string.h>
 #include <errno.h>
-#include <math.h>
+#include <zlib.h>
 #include "request.h"
 #include "response.h"
 #include "header.h"
 #include "custom_structs.h"
 
-void parse_reqest_element(int i, int step, char break_char, char *dest, char *buf)
+void parse_request_element(int i, int step, char break_char, char *dest, char *buf)
 {
     int j = i + (step + 3);
     int k = 0;
@@ -78,18 +78,18 @@ int process_commuinication(int socket_fd, void *args)
         if (buf[i] == 'G' && buf[i + 2] == 'T')
         {
             req.method = "GET";
-            parse_reqest_element(i, 2, ' ', req.path, buf);
+            parse_request_element(i, 2, ' ', req.path, buf);
         }
         // Looking for POST
         if (buf[i] == 'P' && buf[i + 3] == 'T')
         {
             req.method = "POST";
-            parse_reqest_element(i, 2, ' ', req.path, buf);
+            parse_request_element(i, 2, ' ', req.path, buf);
         }
         // Looking for User-Agent
         if (buf[i] == 'U' && buf[i + 9] == 't')
         {
-            parse_reqest_element(i, 9, '\r', request_header.user_agent, buf);
+            parse_request_element(i, 9, '\r', request_header.user_agent, buf);
         }
 
         // Parse Content-Type
@@ -111,7 +111,7 @@ int process_commuinication(int socket_fd, void *args)
         // Looking for Host
         if (buf[i] == 'H' && buf[i + 3] == 't')
         {
-            parse_reqest_element(i, 3, '\n', req.host, buf);
+            parse_request_element(i, 3, '\n', req.host, buf);
         }
         if (buf[i] == 'C' && buf[i + 6] == 't' && buf[i + 8] == 'L' && buf[i + 13] == 'h')
         {
@@ -154,14 +154,15 @@ int process_commuinication(int socket_fd, void *args)
 
     // Creating and sending response
     printf("CREATING RESPONSE:\n");
-    struct RESPONSE res = {
-        .http_v = "HTTP/1.1",
-        .status_code = "404",
-        .status_word = "Not Found",
-        .body[0] = 0,
-    };
+    struct RESPONSE res =
+        {
+            .http_v = "HTTP/1.1",
+            .status_code = "404",
+            .status_word = "Not Found",
+            // .body[0] = 0,
+        };
 
-    char buf_res[500];
+    unsigned char buf_res[500];
 
     struct HEADER header = {
         .content_type = "",
@@ -186,23 +187,68 @@ int process_commuinication(int socket_fd, void *args)
                 value[i] = 0;
             }
             parse_request_path_value(5, req_path_length, value, req);
-            printf("value of echo: %s\n", value);
-            header.content_type = "text/plain";
-            header.content_length = strlen(value);
+
             if (req.accept_encoding != NULL)
             {
                 header.accept_encoding = req.accept_encoding;
-            }
-            printf("\n\nreq.accept_encoding: %s \n\n", req.accept_encoding);
-            printf("\n\nheader.accept_encoding: %s \n\n", header.accept_encoding);
-            printf("\nstrlen: %zd", strlen(value));
-            for (int i = 0; i < strlen(value); ++i)
-            {
-                res.body[i] = value[i];
-            }
+                const char *source = value;
+                size_t source_length = strlen(source);
 
-            // strcpy(res.body, value);
-            printf("\n\nres body: %s \n\n", res.body);
+                uLongf dest_length = source_length + 100;
+
+                Bytef *dest = (Bytef *)malloc(dest_length);
+
+                z_stream strm;
+                strm.zalloc = Z_NULL;
+                strm.zfree = Z_NULL;
+                strm.opaque = Z_NULL;
+                strm.avail_in = source_length;
+                strm.next_in = (Bytef *)source;
+                strm.avail_out = dest_length;
+                strm.next_out = dest;
+
+                int windowBits = 15 + 16;
+                int comporessionLevel = Z_DEFAULT_COMPRESSION;
+
+                int ret = deflateInit2(&strm, comporessionLevel, Z_DEFLATED, windowBits, 8, Z_DEFAULT_STRATEGY);
+                if (ret != Z_OK)
+                {
+                    printf("Error deflate init failed. %s\n", strerror(errno));
+                    free(dest);
+                    return 1;
+                }
+
+                ret = deflate(&strm, Z_FINISH);
+                if (ret != Z_STREAM_END && ret != Z_OK)
+                {
+                    printf("Error deflate failed. %s\n", strerror(errno));
+                    deflateEnd(&strm);
+                    free(dest);
+                    return 1;
+                }
+
+                uLongf compressed_size = strm.total_out;
+                deflateEnd(&strm);
+
+                printf("\ncompressed size: %ld\n", compressed_size);
+                for (size_t i = 0; i < compressed_size; ++i)
+                {
+                    res.body[i] = dest[i];
+                }
+
+                free(dest);
+                header.content_type = "text/plain";
+                header.content_length = compressed_size;
+            }
+            else
+            {
+                for (int i = 0; i < strlen(value); ++i)
+                {
+                    res.body[i] = value[i];
+                }
+                header.content_type = "text/plain";
+                header.content_length = strlen(value);
+            }
         }
         else if (strstr(req.path, "user-agent") != NULL)
         {
@@ -286,8 +332,6 @@ int process_commuinication(int socket_fd, void *args)
 
     if (strlen(res.body) != 0)
     {
-        printf("\ntest res body len: %ld", strlen(res.body));
-        printf("\ntest res body: %s", res.body);
         strcat(buf_res, "\r\n");
         // Headers
         if (header.accept_encoding != NULL)
@@ -306,23 +350,41 @@ int process_commuinication(int socket_fd, void *args)
 
         strcat(buf_res, "\r\n\r\n");
         // Response body
-        printf("\n resbody: %s\n", res.body);
-        char *test = res.body;
-        printf("\n test: %s\n", test);
-        strcat(buf_res, test);
+
+        if (header.accept_encoding != NULL)
+        {
+            int bufsize = strlen(buf_res);
+            for (size_t i = 0; i < header.content_length; ++i)
+            {
+                buf_res[bufsize + i] = res.body[i];
+                printf("\nbuf_res:%02x \n", buf_res[bufsize + i]);
+            }
+
+            for (int i = 0; i < bufsize + header.content_length; ++i)
+            {
+                printf("\nbuf_res connected:%02x \n", buf_res[i]);
+            }
+            res.size_of_response = bufsize + header.content_length;
+        }
+        else
+        {
+            strcat(buf_res, res.body);
+            res.size_of_response = strlen(buf_res);
+        }
     }
     else
     {
         strcat(buf_res, "\r\n\r\n");
+        res.size_of_response = strlen(buf_res);
     }
     printf("buf RESSSSSSSS: %s\n", buf_res);
     ssize_t data_sent_size;
 
     printf("\n----RESPONSE----\n%s\n----END RESPONSE----\n", buf_res);
 
-    printf("\n\nstrlen: %ld", strlen(buf_res));
+    printf("\n\nstrlen: %d", res.size_of_response);
 
-    data_sent_size = send(socket_fd, buf_res, strlen(buf_res), 0);
+    data_sent_size = send(socket_fd, buf_res, res.size_of_response, 0);
     if (data_sent_size == -1)
     {
         printf("Socket creation failed: %s...\n", strerror(errno));

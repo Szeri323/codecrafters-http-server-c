@@ -3,5 +3,6 @@ struct RESPONSE
     char *http_v;
     char *status_code;
     char *status_word;
-    char body[100];
+    unsigned char body[100];
+    int size_of_response;
 };
