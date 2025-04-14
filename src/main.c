@@ -121,7 +121,6 @@ int main(int argc, char **argv)
 
 	while (1)
 	{
-
 		status1 = pthread_create(&thread1, NULL, thread_function_1, &dp);
 		if (status1)
 		{

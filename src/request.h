@@ -15,6 +15,7 @@ struct REQUEST
     struct REQUEST_HEADER request_header;
     int content_length;
     char *accept_encoding;
+    int connection_close;
 
     // Body
     char body[100];
