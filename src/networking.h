@@ -36,7 +36,7 @@ void parse_request_path_value(int i, int req_path_length, char *value, struct RE
 
 int process_commuinication(int socket_fd, void *args)
 {
-    while(1)
+    while (1)
     {
         struct ARGUMENTS *arguments = (struct ARGUMENTS *)args;
         int argc = arguments->argc;
@@ -66,10 +66,11 @@ int process_commuinication(int socket_fd, void *args)
             printf("Socket creation failed: %s...\n", strerror(errno));
             return 1;
         }
-        if(data_recv_size == 0) {
+        if (data_recv_size == 0)
+        {
             close(socket_fd);
             return 0;
-        } 
+        }
 
         printf("data recv size: %zd\n", data_recv_size);
 
@@ -347,9 +348,17 @@ int process_commuinication(int socket_fd, void *args)
         strcat(buf_res, " ");
         strcat(buf_res, res.status_word);
 
-        if (strlen(res.body) != 0)
+        if (req.connection_close)
         {
             strcat(buf_res, "\r\n");
+            strcat(buf_res, "Connection: close");
+        }
+
+        if (strlen(res.body) != 0)
+        {
+
+            strcat(buf_res, "\r\n");
+  
             // Headers
             if (header.accept_encoding != NULL)
             {
